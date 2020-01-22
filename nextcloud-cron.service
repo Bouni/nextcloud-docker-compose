@@ -1,0 +1,7 @@
+[Unit]
+Description=Run nextcloud cron every 5 minutes
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec -u www-data nextcloud php cron.php
+

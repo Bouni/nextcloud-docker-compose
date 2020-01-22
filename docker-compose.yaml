@@ -1,0 +1,66 @@
+version: '2'
+
+services:
+  traefik:
+    image: "traefik:v2.0.0-rc3"
+    container_name: "traefik"
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myhttpchallenge.acme.httpchallenge=true"
+      - "--certificatesresolvers.myhttpchallenge.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myhttpchallenge.acme.email=bouni@owee.de"
+      - "--certificatesresolvers.myhttpchallenge.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - "./letsencrypt:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  db:
+    image: mariadb
+    container_name: mariadb
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    restart: always
+    volumes:
+      - /srv/nextcloud/mysql:/var/lib/mysql
+    env_file:
+      - db.env
+
+  app:
+    image: nextcloud:fpm
+    container_name: nextcloud
+    links:
+      - db
+    volumes:
+      - /srv/nextcloud/html:/var/www/html
+      - /srv/nextcloud/data:/var/www/html/data
+      - /srv/nextcloud/config:/var/www/html/config
+      - /srv/nextcloud/apps:/var/www/html/custom_apps
+      - /srv/nextcloud/themes:/var/www/html/themes
+      - /srv/data:/data
+    env_file:
+      - db.env
+      - nc.env
+    restart: always
+
+  web:
+    image: nginx
+    container_name: nginx
+    links:
+      - app
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    volumes_from:
+      - app
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`cloud.feuerwehr-kuessaberg.de`)"
+      - "traefik.http.routers.whoami.entrypoints=websecure"
+      - "traefik.http.routers.whoami.tls.certresolver=myhttpchallenge"
